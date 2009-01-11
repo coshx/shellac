@@ -6,3 +6,22 @@ may be interchanged.
 
 [TODO: add a link to the paper]
 [TODO: installation / setup instructions]
+
+
+SETUP
+=====
+
+In order to install this plugin, it must be exported as a jar 
+(plugin with fragments and aspectJ support), then this jar must be added
+as to the build path of the project you wish to protect.
+The jar must also be added to the AspectJ aspect path, but this can easily
+be done by right clicking on the jar in the Project References and selecting
+to add it to the aspect path.
+
+
+TODO
+====
+
+This plugin should provide a single menu item to convert it to a Shellac project,
+which should bring in AspectJ support, the necessary project references, and setup
+the apsectj path.
