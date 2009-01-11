@@ -41,4 +41,7 @@ deleted if the proof obligations change.
 
 3. the dynamic checker can only handle simple params (and simple arrays) when it 
 has to copy them (ReqVars that have isOutput == true must be copied before they
-are mutated). We need a way to plugin a way of copying or cloning objects. 
+are mutated). We need a way to plugin a way of copying or cloning objects.
+
+4. a check in a class other than the class that has the Satisfies annotation will
+not be found / executed 
