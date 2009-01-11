@@ -18,6 +18,8 @@ The jar must also be added to the AspectJ aspect path, but this can easily
 be done by right clicking on the jar in the Project References and selecting
 to add it to the aspect path.
 
+Once installed, be sure to bring up the Tasks view to see the proof obligations.
+
 
 TODO
 ====
@@ -25,3 +27,18 @@ TODO
 This plugin should provide a single menu item to convert it to a Shellac project,
 which should bring in AspectJ support, the necessary project references, and setup
 the apsectj path.
+
+
+
+Known Issues
+============
+
+1. there are issues with the KnowledgeBase updating properly (you have to open 
+all the files in a project to get all the annotations)
+
+2. the task markers are getting deleted when marked complete. they should only be
+deleted if the proof obligations change.
+
+3. the dynamic checker can only handle simple params (and simple arrays) when it 
+has to copy them (ReqVars that have isOutput == true must be copied before they
+are mutated). We need a way to plugin a way of copying or cloning objects. 
