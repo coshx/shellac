@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Shellac
+Bundle-SymbolicName: edu.virginia.cs.shellac;singleton:=true
+Bundle-Version: 1.1.0
+Bundle-Activator: edu.virginia.cs.shellac.Activator
+Bundle-Vendor: UVACS
+Require-Bundle: org.eclipse.ui,
+ org.eclipse.core.runtime,
+ org.eclipse.jdt.apt.core;bundle-version="3.3.100",
+ org.eclipse.jdt.core;bundle-version="3.4.0",
+ org.eclipse.core.resources;bundle-version="3.4.0"
+Bundle-RequiredExecutionEnvironment: J2SE-1.5
+Eclipse-LazyStart: true

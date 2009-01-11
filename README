@@ -1,0 +1,8 @@
+Shellac is an Eclipse Plugin that can be added to Java projects 
+in order to add protective dynamic checks, as well as static analysis,
+to ensure the project meets its safety requirements. Shellac allows for 
+a hybrid approach of the dynamic checks and static analysis so that they
+may be interchanged.
+
+[TODO: add a link to the paper]
+[TODO: installation / setup instructions]
