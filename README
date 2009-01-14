@@ -38,9 +38,9 @@ all the files in a project to get all the annotations)
 2. the task markers are getting deleted when marked complete. they should only be
 deleted if the proof obligations change.
 
-3. the dynamic checker can only handle simple params (and simple arrays) when it 
-has to copy them (ReqVars that have isOutput == true must be copied before they
-are mutated). We need a way to plugin a way of copying or cloning objects.
+3. requirement variable names must be unique, even across different theorems
 
 4. a check in a class other than the class that has the Satisfies annotation will
 not be found / executed 
+
+5. some basic types are still not supported as output variables (or history variables)
