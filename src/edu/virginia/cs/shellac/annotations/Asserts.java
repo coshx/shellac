@@ -10,6 +10,8 @@ import java.lang.annotation.Target;
  * satisfy the named requirements. This is useful if the requirements
  * have been proven.
  * 
+ * TODO: This annotation is currently not used / read by the system.
+ * 
  * @author btaitelb
  *
  */

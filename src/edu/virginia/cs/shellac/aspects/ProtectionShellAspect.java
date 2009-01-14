@@ -5,9 +5,10 @@
 package edu.virginia.cs.shellac.aspects;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,14 +20,15 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
 import edu.virginia.cs.shellac.annotations.Checks;
-import edu.virginia.cs.shellac.annotations.Satisfies;
 import edu.virginia.cs.shellac.annotations.ReqVar;
+import edu.virginia.cs.shellac.annotations.Satisfies;
 
 // TODO: update this to use the KnowledgeBase
 @Aspect
 public class ProtectionShellAspect
 {
     private static Logger log = Logger.getLogger(ProtectionShellAspect.class.getName());
+    private static Map<String, Object> reqVarHistories = new HashMap<String, Object>();
     
     @Around("execution(* *(..)) && @annotation(satisfies)")
     public Object invokeProtectionShell(Satisfies satisfies, ProceedingJoinPoint pjp) {
@@ -49,12 +51,17 @@ public class ProtectionShellAspect
                     ReqVar reqVar = (ReqVar) annot;
                     if (reqVar.isOutput()) {
                         // copy of input
-                        reqVars.put(reqVar.value(), copy(pjp.getArgs()[param]));
+                        reqVars.put(reqVar.value(), copy(pjp.getArgs()[param], checkedMethod.getParameterTypes()[param].isPrimitive()));
                         
                         // output (which may change value during proceed)
                         reqVars.put(reqVar.value()+"'", pjp.getArgs()[param]);
                     } else {
-                        reqVars.put(((ReqVar)annot).value(), pjp.getArgs()[param]);
+                        reqVars.put(reqVar.value(), pjp.getArgs()[param]);
+                    }
+                    
+                    if (reqVar.history() > 0) {
+                    	Object hist = updateHistory(reqVar, pjp.getArgs()[param], pjp, checkedMethod.getParameterTypes()[param].isPrimitive());
+                    	reqVars.put(reqVar.value() + "[]", hist);
                     }
                 }
             }
@@ -76,6 +83,10 @@ public class ProtectionShellAspect
         ReqVar returnReqVar = checkedMethod.getAnnotation(ReqVar.class);
         if (returnReqVar != null) {
             reqVars.put(returnReqVar.value(), retVal);
+            if (returnReqVar.history() > 0) {
+            	Object hist = updateHistory(returnReqVar, retVal, pjp, checkedMethod.getReturnType().isPrimitive());
+            	reqVars.put(returnReqVar.value() + "[]", hist);
+            }
         }
         
 
@@ -141,28 +152,116 @@ public class ProtectionShellAspect
     }
 
     /**
-     * Makes a deep copy of the given element
-     * 
-     * TODO: implement this for more than just int[]!
+     * Updates the history for the given requirements variable.
+     *
+     * @return the updated history object
      */
-    protected Object copy(Object value) {
-        if (value instanceof int[]) {
-        	return Arrays.copyOf((int[])value, ((int[])value).length); 
-        } else {
-            return null;
-        }
-        
+    protected Object updateHistory(ReqVar reqVar, Object value, 
+    		ProceedingJoinPoint pjp, boolean isPrimitive) {
+    	Object hist = null;
+    	if (reqVarHistories.containsKey(reqVar.value())) {
+    		hist = reqVarHistories.get(reqVar.value());
+	    	int currentLen = Array.getLength(hist);
+	    	
+	    	// possibly grow the array
+	    	Object newHist = hist;
+	    	if (currentLen < reqVar.history()) {
+	    		newHist = Array.newInstance(hist.getClass().getComponentType(), currentLen + 1);
+	    		currentLen++;
+	    	}
+	    	
+	    	// shift the array
+	    	for (int i = currentLen - 1; i > 0; i--) {
+	    		Array.set(newHist, i, Array.get(hist, i-1));
+	    	}
+	    	
+	    	hist = newHist;
+    	} else {
+    		// start it at a length of 1, and we'll increase until it is at reqVar.history()
+    		// this is a good way of easily telling if we haven't made history number of calls yet
+    		if (isPrimitive) {
+    			if (value.getClass().isAssignableFrom(Boolean.class))
+    				hist = Array.newInstance(Boolean.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Byte.class))
+    				hist = Array.newInstance(Byte.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Character.class))
+    				hist = Array.newInstance(Character.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Short.class))
+    				hist = Array.newInstance(Short.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Integer.class))
+    				hist = Array.newInstance(Integer.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Long.class))
+    				hist = Array.newInstance(Long.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Float.class))
+    				hist = Array.newInstance(Float.TYPE, 1);
+    			else if (value.getClass().isAssignableFrom(Double.class))
+    				hist = Array.newInstance(Double.TYPE, 1);
+    			else {
+    				log.log(Level.SEVERE, value.getClass() + " is not assignable from any primitive types!");
+    				System.exit(1);
+    			}
+    		} else {
+    			hist = Array.newInstance(value.getClass(), 1);
+    		}
+    	}
+    	
+    	
+    	// add a copy of the current value to the array
+    	Array.set(hist, 0, copy(value, isPrimitive));
+
+    	// update our copy of the history
+		reqVarHistories.put(reqVar.value(), hist);
+		
+		return hist;
+	}
+
+	/**
+     * Makes a deep copy of the given element
+     */
+    protected Object copy(Object value, boolean isPrimitive) {
+    	if (value == null || isPrimitive) {
+    		return value;
+    	} else if (value.getClass().isArray()) {
+    		int len = Array.getLength(value);
+    		Object copy = Array.newInstance(value.getClass().getComponentType(), Array.getLength(value));
+    		for (int i = 0; i < len; i++) {
+    			Array.set(copy, i, copy(Array.get(value, i), value.getClass().getComponentType().isPrimitive()));
+    		}
+    		return copy;
+    	} else {
+    		// the object had better have a copy constructor!
+    		Constructor<?> constructor = null;
+    		
+    		try {
+				constructor = value.getClass().getConstructor(value.getClass());
+			} catch (SecurityException e) {
+				log.log(Level.SEVERE, "Unable to get constructor of class " + value.getClass(), e);
+				System.exit(1);
+			} catch (NoSuchMethodException e) {
+				log.log(Level.SEVERE, value.getClass() + " must have a copy constructor in order to use it!", e);
+				System.exit(1);
+			}
+
+			try {
+				return constructor.newInstance(value);
+			} catch (Exception e) {
+				log.log(Level.SEVERE, value.getClass() + " must have a copy constructor in order to use it!", e);
+				System.exit(1);
+			}
+			
+			return null; // stub to keep compiler happy
+			
+    	}
     }
     
-    
     /**
-     * helper method to get the method that the proeceeding join point matches
+     * helper method to get the method that the proceeding join point matches
      */
     protected Method getMethod(ProceedingJoinPoint pjp) {
         List<Method> possibleMethods = new ArrayList<Method>();
         
         Object[] args = pjp.getArgs();
-        Class targetClass = pjp.getSourceLocation().getWithinType();
+        Class<?> targetClass = pjp.getSourceLocation().getWithinType();
         
         for (Method m : targetClass.getMethods()) {
             if (m.getName().equals(pjp.getSignature().getName())) {
