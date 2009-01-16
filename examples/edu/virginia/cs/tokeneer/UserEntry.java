@@ -21,7 +21,7 @@ public class UserEntry {
 	}
 	
 	
-	@Satisfies({"r1o2"})
+	@Satisfies({"gotUserToken_to_quiescent"})
 	// generates r1o2_dyn --> r1o2
 	private void userTokenTorn() {
 		// skipping audit logging
@@ -31,11 +31,10 @@ public class UserEntry {
 		userToken.clear();
 	}
 	
-	@Satisfies({"r1o2_dyn"})
-	@ReqVar("status!")
-	private StatusT setStatus(@ReqVar(value="status", history=5)StatusT newStatus) {
+	@Satisfies({"gotUserToken_to_quiescent"})
+	@ReqVar(value = "status", isInstance = true)
+	private void setStatus(StatusT newStatus) {
 		this.status = newStatus;
-		return this.status;
 	}
 	
 	@Checks("r1o2_dyn")
@@ -312,6 +311,7 @@ public class UserEntry {
 		setStatus(StatusT.GotUserToken);
 	}
 	
-	
+
+	public void checkGotUserTokenToQuiescent(StatusT )
 	
 }

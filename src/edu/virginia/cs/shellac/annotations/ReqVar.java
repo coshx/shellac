@@ -49,4 +49,16 @@ public @interface ReqVar {
      * many calls have been made.
      */
     int history() default 1;
+    
+    /**
+     * Method-level annotations can use a ReqVar with the same name
+     * as an instance variable of the class where the method is defined,
+     * and set this flag. This signifies that the method intends to change
+     * the value of that instance variable.
+     * 
+     * The checker will be presented variables as if the method were
+     * called with an {@link #isOutput()} ReqVar.
+     * @return
+     */
+    boolean isInstance() default false;
 }

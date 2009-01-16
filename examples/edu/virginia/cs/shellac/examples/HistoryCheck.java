@@ -13,7 +13,7 @@ public class HistoryCheck {
 	 * be more than 5 of what it was 4 calls ago.
 	 * @param num
 	 */
-	@Satisfies("process")
+	@Satisfies("processA")
 	public void processNext(@ReqVar(value="num", history=5)int num) {
 		return;
 	}

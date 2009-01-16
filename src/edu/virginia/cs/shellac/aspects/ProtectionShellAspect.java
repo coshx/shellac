@@ -7,6 +7,7 @@ package edu.virginia.cs.shellac.aspects;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -44,6 +45,26 @@ public class ProtectionShellAspect
         // get the requirements and the mappings for the checked method
         Method checkedMethod = getMethod(pjp);
         
+        // look for any isInstance ReqVars and copy their current values
+        ReqVar instanceReqVar = checkedMethod.getAnnotation(ReqVar.class);
+        if (instanceReqVar != null && instanceReqVar.isInstance()) {
+        	Object instanceVal = getInstanceValueCopy(pjp, instanceReqVar);
+            reqVars.put(instanceReqVar.value(), instanceVal);
+            if (instanceReqVar.history() > 0) {
+            	boolean isPrimitive = false;
+            	try {
+            		isPrimitive = pjp.getThis().getClass().getField(instanceReqVar.value()).getType().isPrimitive();
+            	} catch (NoSuchFieldException ex) {
+        			log.log(Level.SEVERE, "Cannot find instance field with name " + instanceReqVar.value() + " in "
+        					+ pjp.getThis().getClass(), ex);
+        			System.exit(1);            		
+            	}
+            	Object hist = updateHistory(instanceReqVar, instanceVal, pjp, isPrimitive);
+            	reqVars.put(instanceReqVar.value() + "[]", hist);
+            }
+        }
+
+        // store, and possibly copy, annotated parameters
         Annotation[][] paramAnnotations = checkedMethod.getParameterAnnotations();
         for (int param = 0; param < paramAnnotations.length; param++) {
             for (Annotation annot : paramAnnotations[param]) {
@@ -82,11 +103,27 @@ public class ProtectionShellAspect
         // the returned object might correspond to a requirement variable
         ReqVar returnReqVar = checkedMethod.getAnnotation(ReqVar.class);
         if (returnReqVar != null) {
-            reqVars.put(returnReqVar.value(), retVal);
-            if (returnReqVar.history() > 0) {
-            	Object hist = updateHistory(returnReqVar, retVal, pjp, checkedMethod.getReturnType().isPrimitive());
-            	reqVars.put(returnReqVar.value() + "[]", hist);
-            }
+        	Object value = retVal;
+        	String name = returnReqVar.value();
+        	boolean isPrimitive = checkedMethod.getReturnType().isPrimitive();
+        	
+        	if (returnReqVar.isInstance()) {
+        		name = returnReqVar.value() + "'";
+        		value = getInstanceValueCopy(pjp, returnReqVar);
+        		try {
+        			isPrimitive = pjp.getThis().getClass().getField(returnReqVar.value()).getType().isPrimitive();
+        		} catch (NoSuchFieldException ex) {
+        			log.log(Level.SEVERE, "Cannot find instance field with name " + returnReqVar.value() + " in "
+        					+ pjp.getThis().getClass(), ex);
+        			System.exit(1);
+        		}
+        	} 
+        	
+        	reqVars.put(name, value);
+        	if (returnReqVar.history() > 0) {
+        		Object hist = updateHistory(returnReqVar, value, pjp, isPrimitive);
+        		reqVars.put(returnReqVar.value() + "[]", hist);
+        	}
         }
         
 
@@ -316,6 +353,28 @@ public class ProtectionShellAspect
         }
         
         return possibleMethods.get(0);
+    }
+    
+    /**
+     * gets a copy of the current value of an instance variable represented by the given reqvar
+     * the reqvar should have isInstance() == true
+     * @param pjp
+     * @param reqVarName
+     * @return
+     */
+    protected Object getInstanceValueCopy(ProceedingJoinPoint pjp, ReqVar reqvar) {
+    	String name = reqvar.value();
+		String getter = "get"+Character.toUpperCase(name.charAt(0)) + name.substring(1);
+		try {
+			Field field = pjp.getThis().getClass().getField(name);
+			boolean isPrimitive = field.getType().isPrimitive();
+			return copy(field.get(pjp.getThis()), isPrimitive);
+		} catch (Exception ex) {
+			log.log(Level.SEVERE, "To use instance variable ReqVar annotations, you must provide a getter "
+					+ "for that instance variable. An error occurred trying to invoke the getter " + getter, ex);
+			System.exit(1);
+			return null; // make the compiler happy
+		}
     }
     
 }

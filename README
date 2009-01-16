@@ -27,7 +27,13 @@ This plugin should provide a single menu item to convert it to a Shellac project
 which should bring in AspectJ support, the necessary project references, and setup
 the apsectj path.
 
+We should add static checks that assignments to output ReqVars can only
+be made through calls to annotated methods, and that either instance
+variables must not be set inside @Satisfies methods, or add annotations
+to the instance vars themselves.
 
+We should also add checks that the instance variables have getters if they are used as 
+a requirements variable, and that the getters are simple (just return the value).
 
 Known Issues
 ============
