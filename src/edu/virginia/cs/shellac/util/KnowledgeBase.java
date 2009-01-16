@@ -365,20 +365,24 @@ public class KnowledgeBase {
 				methodCallString += ")? ";
 		}
 
-		// TODO: grab the else part, and separate with ||
-		
 		@Override
 		public boolean visit(IfStatement node) {
 			//System.out.println("In if-stmt " + node);
-			if (inSatisfiesMethod)
+			if (inSatisfiesMethod) {
+				node.getExpression().accept(this);
 				methodCallString += "; (";
+				node.getThenStatement().accept(this);
+				
+				if (node.getElseStatement() == null) {
+					methodCallString += ")? ";
+				} else {
+					methodCallString += " || ";
+					node.getElseStatement().accept(this);
+					methodCallString += ") ";
+				}
+				return false;
+			}
 			return true;
-		}
-		@Override
-		public void endVisit(IfStatement node) {
-			//System.out.println("Done with if-stmt " + node);
-			if (inSatisfiesMethod)
-				methodCallString += ")? ";
 		}
 		
 		
@@ -484,7 +488,8 @@ public class KnowledgeBase {
 			
 			// remove useless semi-colons
 			methodCallString = methodCallString.replaceAll("\\(\\s*;\\s*", "(");
-			
+			methodCallString = methodCallString.replaceAll("\\|\\|\\s*;", "||");
+
 			// TODO: remove marks of loops/conditionals without any method calls
 			// TODO: simplify qualifiers, like convert (( something )?)* to ( something )*
 			// but we can't use regular expressions to match parens, and

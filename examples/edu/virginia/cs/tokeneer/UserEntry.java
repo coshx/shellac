@@ -21,74 +21,19 @@ public class UserEntry {
 	}
 	
 	
-	@Satisfies({"gotUserToken_to_quiescent"})
-	// generates r1o2_dyn --> r1o2
+	@Satisfies({"r1o2"})
+	@ReqVar(value="status", isInstance=true)
 	private void userTokenTorn() {
 		// skipping audit logging
 		display.setValue(Display.WELCOME);
-		setStatus(StatusT.Quiescent);
+		quiescent();
 		stats.addFailedEntry();
 		userToken.clear();
 	}
 	
-	@Satisfies({"gotUserToken_to_quiescent"})
-	@ReqVar(value = "status", isInstance = true)
-	private void setStatus(StatusT newStatus) {
-		this.status = newStatus;
-	}
-	
-	@Checks("r1o2_dyn")
-	public void checkR1O2(@ReqVar(value="status_hist") StatusT[] oldStatus, 
-			@ReqVar("status!") StatusT newStatus) {
-		if (newStatus == StatusT.WaitingRemoveTokenSuccess) {
-			// check oldStatus[0], oldStatus[1], ...
-		}
-	}
-	
-	/**
-	 * This isn't currently checking r1o2 exactly, that WaitingRemoveTokenSuccess
-	 * can only be reached through one or two chains. This is checking that the
-	 * state always transitions towards waitingRemoveTokenSuccess, which isn't
-	 * always the case.
-	 * 
-	 * TODO: add syntax to maintain a discrete history
-	 * 
-	 */
-	@Checks("r1o2_dyn")
-	public void checkR1O2(@ReqVar("status") StatusT oldStatus, 
-				@ReqVar("status'") StatusT newStatus) {
-		switch(oldStatus) {
-		case GotUserToken:
-			if (newStatus != StatusT.WaitingFinger &&
-					newStatus != StatusT.WaitingEntry) {
-				// throw new CheckFailedException("GotUserToken must transition to either WaitingFinger or WaitingEntry");
-			}
-			break;
-		case WaitingFinger:
-			if (newStatus != StatusT.GotFinger) {
-				// throw new CheckFailedException("WaitingFinger must transition to GotFinger");
-			}
-			break;
-		case GotFinger:
-			if (newStatus != StatusT.WaitingUpdateToken) {
-				// throw new CheckFailedException("GotFigner must transition to WaitingUpdateToken");
-			}
-			break;
-		case WaitingUpdateToken:
-			if (newStatus != StatusT.WaitingEntry) {
-				// throw new CheckFailedException("WaitingUpdateToken must transition to WaitingEntry");
-			}
-			break;
-		case WaitingEntry:
-			if (newStatus != StatusT.WaitingRemoveTokenSuccess) {
-				// throw new CheckFailedException("WaitingEntry must transition to WaitingRemoveTokenSuccess");
-			}
-			break;
-		}
-	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2 | r1o2_dyn --> r1o2
+	@ReqVar(value="status", isInstance=true)
 	private void validateUserToken() {
 		if (!userToken.isPresent()) {
 			userTokenTorn();
@@ -98,13 +43,13 @@ public class UserEntry {
 			if (authCertOk) {
 				// skipping audit logging
 				display.setValue(Display.WAIT);
-				setStatus(StatusT.WaitingEntry);
+				waitingEntry();
 			} else {
 				boolean tokenOk = userToken.readAndCheck();
 				if (tokenOk) {
 					// skipping audit logging
 					display.setValue(Display.INSERT_FINGER);
-					setStatus(StatusT.WaitingFinger);
+					waitingFinger();
 					fingerTimeout = System.currentTimeMillis() + configData.getFingerWaitDuration();
 					
 					// flush any stale BIO data
@@ -112,7 +57,7 @@ public class UserEntry {
 				} else {
 					// skipping audit logging
 					display.setValue(Display.REMOVE_TOKEN);
-					setStatus(StatusT.WaitingRemoveTokenFail);
+					waitingRemoveTokenFail();
 				}
 			}
 
@@ -122,7 +67,6 @@ public class UserEntry {
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2 | r1o2_dyn | null --> r1o2
 	private void readFinger() {
 		if (!userToken.isPresent()) {
 			userTokenTorn();
@@ -130,13 +74,13 @@ public class UserEntry {
 			if (System.currentTimeMillis() > this.fingerTimeout) {
 				// skipping audit logging
 				display.setValue(Display.REMOVE_TOKEN);
-				setStatus(StatusT.WaitingRemoveTokenFail);
+				waitingRemoveTokenFail();
 			} else {
 				if (bio.isFingerPresent()) {
 					// skipping audit logging
 				
 					display.setValue(Display.WAIT);
-					setStatus(StatusT.GotFinger);
+					gotFinger();
 				} else {
 					// null (the Ada implementation doesn't do anything here)
 				}
@@ -145,7 +89,6 @@ public class UserEntry {
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2 | r1o2_dyn --> r1o2
 	private void validateFinger() {
 		if (!userToken.isPresent()) {
 			userTokenTorn();
@@ -160,24 +103,23 @@ public class UserEntry {
 			
 			if (isMatch) {
 				display.setValue(Display.WAIT);
-				setStatus(StatusT.WaitingUpdateToken);
+				waitingUpdateToken();
 				stats.addSuccessfulBio();
 			} else {
 				display.setValue(Display.REMOVE_TOKEN);
-				setStatus(StatusT.WaitingRemoveTokenFail);
+				waitingRemoveTokenFail();
 				stats.addFailedBio();
 			}
 		}
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2 | r1o2_dyn --> r1o2
 	private void updateToken() {
 		if (!userToken.isPresent()) {
 			userTokenTorn();
 		} else {
 			boolean updateOk = userToken.addAuthCert();
-			setStatus(StatusT.WaitingEntry);
+			waitingEntry();
 			if (updateOk) {
 				userToken.updateAuthCert();
 				// skipping audit logging
@@ -191,7 +133,6 @@ public class UserEntry {
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2 | r1o2_dyn --> r1o2
 	private void validateEntry() {
 		if (!userToken.isPresent()) {
 			userTokenTorn();
@@ -199,30 +140,29 @@ public class UserEntry {
 			if (configData.isInEntryPeriod()) {
 				// skipping audit logging
 				display.setValue(Display.OPEN_DOOR);
-				setStatus(StatusT.WaitingRemoveTokenSuccess);
+				waitingRemoveTokenSuccess();
 				this.tokenRemovalTimeout = System.currentTimeMillis() + configData.getTokenRemovalDuration();
 			} else {
 				// skipping audit logging
 				display.setValue(Display.REMOVE_TOKEN);
-				setStatus(StatusT.WaitingRemoveTokenFail);
+				waitingRemoveTokenFail();
 			}
 		}
 	}
 	
 	@Satsifies({"r1o2"})
-	// generates r1o2_dyn | null --> r1o2
 	private void unlockDoor() {
 		if (!userToken.isPresent()) {
 			door.unlockDoor();
 			userToken.clear();
 			display.setValue(Display.DOOR_UNLOCKED);
-			setStatus(StatusT.Quiescent);
+			quiescent();
 			stats.addSuccessfulEntry();
 		} else {
 			if (System.currentTimeMillis() > this.tokenRemovalTimeout) {
 				// skip audit logging
 				display.setValue(Display.REMOVE_TOKEN);
-				setStatus(StatusT.WaitingRemoveTokenFail);
+				waitingRemoveTokenFail();
 			} else {
 				// null
 			}
@@ -230,11 +170,10 @@ public class UserEntry {
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2_dyn -> r1o2
 	private void failedAccessTokenRemoved() {
 		// skipping audit logging
 		display.setValue(Display.WELCOME);
-		setStatus(StatusT.Quiescent);
+		quiescent();
 		stats.addFailedEntry();
 		userToken.clear();
 	}
@@ -275,7 +214,6 @@ public class UserEntry {
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2 | null --> r1o2
 	public void progress() {
 		StatusT localStatus = status;
 		
@@ -305,13 +243,265 @@ public class UserEntry {
 	}
 	
 	@Satisfies({"r1o2"})
-	// generates r1o2_dyn --> r1o2
 	public void startEntry() {
 		display.setValue(Display.WAIT);
-		setStatus(StatusT.GotUserToken);
+		gotUserToken();
 	}
 	
 
-	public void checkGotUserTokenToQuiescent(StatusT )
+	// TODO: annotate somehow that this is the only place we're allowed to change status
+	private void setStatus(StatusT newStatus) {
+		this.status = newStatus;
+	}
 	
+
+	/*
+	 * State transition functions
+	 */
+	
+	@Satisfies({"quiescent_to_gotUserToken"})
+	@ReqVar(value="status", isInstance=true)
+	private void gotUserToken() {
+		setStatus(StatusT.GotUserToken);
+	}
+
+	@Satisfies({"gotUserToken_to_waitingFinger", 
+				"waitingFinger_to_waitingFinger"})
+	@ReqVar(value="status", isInstance=true)
+	private void waitingFinger() {
+		setStatus(StatusT.WaitingFinger);
+	}
+
+	@Satisfies({"waitingFinger_to_gotFinger"})
+	@ReqVar(value="status", isInstance=true)
+	private void gotFinger() {
+		setStatus(StatusT.GotFinger);
+	}
+
+	@Satisfies({"gotFinger_to_waitingUpdateToken"})
+	@ReqVar(value="status", isInstance=true)
+	private void waitingUpdateToken() {
+		setStatus(StatusT.WaitingUpdateToken);
+	}
+
+	@Satisfies({"gotUserToken_to_waitingEntry", 
+				"waitingUpdateToken_to_waitingEntry"})
+	@ReqVar(value="status", isInstance=true)
+	private void waitingEntry() {
+		setStatus(StatusT.WaitingEntry);
+	}
+
+	@Satisfies({"gotUserToken_to_waitingRemoveTokenFail",
+				"waitingFinger_to_waitingRemoveTokenFail",
+				"gotFinger_to_waitingRemoveTokenFail",
+				"waitingEntry_to_waitingRemoveTokenFail",
+				"waitingRemoveTokenSuccess_to_waitingRemoveTokenFail"})
+	@ReqVar(value="status", isInstance=true)
+	private void waitingRemoveTokenFail() {
+		setStatus(StatusT.WaitingRemoveTokenFail);
+	}
+
+	@Satisfies({"waitingEntry_to_waitingRemoveTokenSuccess",
+				"waitingRemoveTokenSuccess_to_waitingRemoveTokenSuccess"})
+	@ReqVar(value="status", isInstance=true)
+	private void waitingRemoveTokenSuccess() {
+		setStatus(StatusT.WaitingRemoveTokenSuccess);
+	}
+
+	@Satisfies({"gotUserToken_to_quiescent",
+				"waitingFinger_to_quiescent",
+				"gotFinger_to_quiescent",
+				"waitingUpdateToken_to_quiescent",
+				"waitingEntry_to_quiescent",
+				"waitingRemoveTokenSuccess_to_quiescent",
+				"waitingRemoveTokenFail_to_quiescent"})
+	@ReqVar(value="status", isInstance=true)
+	private void quiescent() {
+		setStatus(StatusT.Quiescent);
+	}
+
+
+	/*
+	 *
+	 * Checks for status updates.
+	 * 
+	 */
+	
+	
+	@Checks("quiescent_to_gotUserToken")
+	public void checkQuiescentToGotUserToken(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.Quiescent && newStatus != StatusT.GotUserToken)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+	@Checks("gotUserToken_to_quiescent")
+	public void checkGotUserTokenToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotUserToken && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("gotUserToken_to_waitingFinger")
+	public void checkGotUserTokenToWaitingFinger(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotUserToken && newStatus != StatusT.WaitingFinger)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("gotUserToken_to_waitingEntry")
+	public void checkGotUserTokenToWaitingEntry(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotUserToken && newStatus != StatusT.WaitingEntry)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("gotUserToken_to_waitingRemoveTokenFail")
+	public void checkGotUserTokenToWaitingRemoveTokenFail(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotUserToken && newStatus != StatusT.WaitingRemoveTokenFail)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingFinger_to_waitingFinger")
+	public void checkWaitingFingerToWaitingFinger(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingFinger && newStatus != StatusT.WaitingFinger)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+	
+	@Checks("waitingFinger_to_quiescent")
+	public void checkWaitingFingerToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingFinger && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingFinger_to_gotFinger")
+	public void checkWaitingFingerToGotFinger(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingFinger && newStatus != StatusT.GotFinger)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingFinger_to_waitingRemoveTokenFail")
+	public void checkWaitingFingerToWaitingRemoveTokenFail(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingFinger && newStatus != StatusT.WaitingRemoveTokenFail)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+	
+	@Checks("gotFinger_to_quiescent")
+	public void checkGotFingerToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotFinger && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+	
+	@Checks("gotFinger_to_waitingUpdateToken")
+	public void checkGotFingerToWaitingUpdateToken(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotFinger && newStatus != StatusT.WaitingUpdateToken)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("gotFinger_to_waitingRemoveTokenFail")
+	public void checkGotFingerToWaitingRemoveTokenFail(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.GotFinger && newStatus != StatusT.WaitingRemoveTokenFail)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingUpdateToken_to_quiescent")
+	public void checkWaitingUpdateTokenToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingUpdateToken && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+	
+	@Checks("waitingUpdateToken_to_waitingEntry")
+	public void checkWaitingUpdateTokenTokenToWaitingEntry(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingUpdateToken && newStatus != StatusT.WaitingEntry)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingEntry_to_quiescent")
+	public void checkWaitingEntryToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingEntry && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+	
+	@Checks("waitingEntry_to_waitingRemoveTokenSuccess")
+	public void checkWaitingEntryToWaitingRemoveTokenSuccess(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingEntry && newStatus != StatusT.WaitingRemoveTokenSuccess)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingEntry_to_waitingRemoveTokenFail")
+	public void checkWaitingEntryToWaitingRemoveTokenFail(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingEntry && newStatus != StatusT.WaitingRemoveTokenFail)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingRemoveTokenSuccess_to_waitingRemoveTokenSuccess")
+	public void checkWaitingRemoveTokenSuccessToWaitingRemoveTokenSuccess(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingRemoveTokenSuccess && newStatus != StatusT.WaitingRemoveTokenSuccess)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingRemoveTokenSuccess_to_quiescent")
+	public void checkWaitingRemoveTokenSuccessToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingRemoveTokenSuccess && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingRemoveTokenSuccess_to_waitingRemoveTokenFail")
+	public void checkWaitingRemoveTokenSuccessToWaitingRemoveTokenFail(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingRemoveTokenSuccess && newStatus != StatusT.WaitingRemoveTokenFail)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingRemoveTokenFail_to_waitingRemoveTokenFail")
+	public void checkWaitingRemoveTokenFailToWaitingRemoveTokenFail(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingRemoveTokenFail && newStatus != StatusT.WaitingRemoveTokenFail)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+	@Checks("waitingRemoveTokenFail_to_quiescent")
+	public void checkWaitingRemoveTokenFailToQuiescent(@ReqVar("status")StatusT oldStatus, 
+			@ReqVar("status'")StatusT newStatus) throws Exception {
+		if (oldStatus == StatusT.WaitingRemoveTokenFail && newStatus != StatusT.Quiescent)
+			throw new Exception(oldStatus.toString() + " -> " + newStatus.toString() 
+					+ " is not a valid transition.");
+	}
+
+
 }
